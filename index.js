@@ -5,58 +5,35 @@ const cors = require("cors");
 
 const app = express();
 
-// ══════════════════════════════════════════════
-// CORS FIX — This is what was causing your error
-// ══════════════════════════════════════════════
+// IMPORTANT: Allow your Netlify frontend domain
 app.use(cors({
   origin: [
-    "https://botchatsai.netlify.app",
+    "https://botchatsai.netlify.app",  // ← Replace with YOUR Netlify URL
     "http://localhost:5500",
-    "http://127.0.0.1:5500",
-    "http://localhost:3000"
+    "http://127.0.0.1:5500"
   ],
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ["GET", "POST"],
   credentials: true
 }));
 
-// Handle preflight OPTIONS requests explicitly
-app.options("*", cors());
-
 app.use(express.json());
 
-// Root route
+// Health check route — so you can test if backend is alive
 app.get("/", (req, res) => {
-  res.json({
-    status: "Varta AI Backend is running",
-    timestamp: new Date().toISOString(),
-    hasApiKey: !!process.env.API_KEY
-  });
+  res.json({ status: "Varta AI Backend is running" });
 });
 
-// Health check
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
-});
-
-// Chat endpoint
 app.post("/chat", async (req, res) => {
-  console.log("Received:", req.body);
-
   try {
     const userMessage = req.body.message;
 
     if (!userMessage) {
-      return res.status(400).json({
-        content: "No message provided."
-      });
+      return res.status(400).json({ error: "Message is required" });
     }
 
     if (!process.env.API_KEY) {
-      console.error("API_KEY not set!");
-      return res.status(500).json({
-        content: "Server config error. API key missing."
-      });
+      console.error("API_KEY is not set in environment variables");
+      return res.status(500).json({ error: "Server configuration error" });
     }
 
     const response = await axios.post(
@@ -64,7 +41,7 @@ app.post("/chat", async (req, res) => {
       {
         model: "openrouter/auto",
         messages: [
-          { role: "system", content: "You are a helpful assistant called Varta AI." },
+          { role: "system", content: "You are a helpful assistant." },
           { role: "user", content: userMessage }
         ]
       },
@@ -74,29 +51,24 @@ app.post("/chat", async (req, res) => {
           "Content-Type": "application/json",
           "HTTP-Referer": "https://botchatsai.netlify.app",
           "X-Title": "Varta AI"
-        },
-        timeout: 30000
+        }
       }
     );
 
-    res.json(response.data.choices[0].message);
+    const reply = response.data.choices[0].message;
+    res.json(reply);
 
   } catch (error) {
-    console.error("Error:", error.response?.data || error.message);
+    console.error("API Error:", error.response?.data || error.message);
     res.status(500).json({
-      content: "Sorry, something went wrong: " +
-        (error.response?.data?.error?.message || error.message)
+      content: "Sorry, something went wrong. Please try again.",
+      error: error.response?.data?.error?.message || error.message
     });
   }
 });
 
-// Catch unknown routes
-app.use("*", (req, res) => {
-  res.status(404).json({ error: "Route not found" });
-});
-
+// IMPORTANT: Railway assigns a dynamic PORT — never hardcode 3000
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`API Key: ${!!process.env.API_KEY}`);
 });
