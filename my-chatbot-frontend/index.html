@@ -930,6 +930,64 @@
       .chat-title h2 { font-size: 17px; }
       .modal { margin: 16px; max-width: 100%; }
     }
+    /* ========== MOBILE COMPATIBILITY ========== */
+.app-container {
+  height: 100vh;
+  height: 100dvh;
+  height: calc(var(--app-height, 100vh));
+}
+
+.chat-area, .sidebar-content, .modal-body {
+  -webkit-overflow-scrolling: touch;
+}
+
+.input-area {
+  padding-bottom: max(32px, env(safe-area-inset-bottom, 32px));
+}
+
+@media (hover: none) {
+  .message-actions { opacity: 0.7 !important; }
+  .chat-history-item .delete-btn { opacity: 0.5 !important; }
+}
+
+@media (max-width: 768px) {
+  .input-field { font-size: 16px !important; }
+  .form-group input, .form-group select { font-size: 16px !important; }
+
+  .setting-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+  .theme-selector, .font-size-selector, .toggle-switch { margin-left: 0 !important; }
+
+  .theme-option { width: 44px !important; height: 44px !important; }
+  .font-size-option {
+    padding: 10px 16px !important;
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .modal {
+    max-height: 90vh; max-height: 90dvh;
+    display: flex; flex-direction: column;
+  }
+  .modal-body { max-height: none; flex: 1; overflow-y: auto; }
+  .modal-overlay { padding: 10px; align-items: flex-end; }
+
+  .profile-dropdown {
+    position: fixed; bottom: 80px; left: 10px; right: 10px; margin-bottom: 0;
+  }
+
+  body.modal-open, body.sidebar-open { touch-action: none; }
+}
+
+@media (max-width: 480px) {
+  .suggestion-card { padding: 16px; }
+  .suggestion-card-icon { width: 40px; height: 40px; margin-bottom: 12px; }
+  .input-container { border-radius: 14px; }
+  .send-button { width: 44px; height: 44px; border-radius: 12px; }
+}
   </style>
 </head>
 <body>
@@ -1181,7 +1239,7 @@
   </div>
 
 <script>
-// ===== State — NO file variables =====
+// ===== State =====
 let chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
 let currentChatId = null;
 let currentMessages = [];
@@ -1192,17 +1250,46 @@ let appSettings = JSON.parse(localStorage.getItem('appSettings')) || {
   theme: 'dark', fontSize: 'medium', enterToSend: true,
   showTimestamps: true, soundEnabled: false, saveHistory: true
 };
+var chatSummaries = JSON.parse(localStorage.getItem('chatSummaries') || '{}');
+
+// ===== MOBILE VIEWPORT FIX =====
+function setAppHeight() {
+  var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', function() { setTimeout(setAppHeight, 100); });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', setAppHeight);
+}
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', function() {
   loadUserProfile();
   loadSettings();
   renderChatHistory();
+
+  // Mobile keyboard fix
+  var input = document.getElementById('messageInput');
+  if (input) {
+    input.addEventListener('focus', function() {
+      setTimeout(function() { setAppHeight(); scrollToBottom(); }, 300);
+    });
+    input.addEventListener('blur', function() { setTimeout(setAppHeight, 100); });
+  }
+
   document.addEventListener('click', function(e) {
     var dropdown = document.getElementById('profileDropdown');
     var profile = document.getElementById('userProfile');
     if (!profile.contains(e.target)) dropdown.classList.remove('active');
   });
+
+  // Prevent pull-to-refresh on mobile
+  var chatArea = document.getElementById('chatArea');
+  chatArea.addEventListener('touchstart', function() {
+    if (chatArea.scrollTop === 0) chatArea.scrollTop = 1;
+  }, { passive: true });
 });
 
 // ===== Theme & Settings =====
@@ -1283,10 +1370,12 @@ function openSettingsModal(event) {
   if (event) event.stopPropagation();
   document.getElementById('profileDropdown').classList.remove('active');
   document.getElementById('settingsModal').classList.add('active');
+  document.body.classList.add('modal-open');
 }
 
 function closeSettingsModal() {
   document.getElementById('settingsModal').classList.remove('active');
+  document.body.classList.remove('modal-open');
 }
 
 // ===== Profile =====
@@ -1316,10 +1405,12 @@ function openProfileModal(event) {
   if (event) event.stopPropagation();
   document.getElementById('profileDropdown').classList.remove('active');
   document.getElementById('profileModal').classList.add('active');
+  document.body.classList.add('modal-open');
 }
 
 function closeProfileModal() {
   document.getElementById('profileModal').classList.remove('active');
+  document.body.classList.remove('modal-open');
 }
 
 function handleAvatarChange(event) {
@@ -1399,6 +1490,10 @@ function deleteChat(event, chatId) {
   event.stopPropagation();
   if (confirm('Remove this conversation?')) {
     chatHistory = chatHistory.filter(function(c) { return c.id !== chatId; });
+    if (chatSummaries[chatId]) {
+      delete chatSummaries[chatId];
+      saveSummaries();
+    }
     localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
     if (currentChatId === chatId) startNewChat();
     renderChatHistory();
@@ -1411,7 +1506,9 @@ function clearAllChats(event) {
   document.getElementById('profileDropdown').classList.remove('active');
   if (confirm('Remove all conversation history?')) {
     chatHistory = [];
+    chatSummaries = {};
     localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    localStorage.setItem('chatSummaries', '{}');
     startNewChat();
     renderChatHistory();
     showToast('All history cleared', 'success');
@@ -1422,6 +1519,10 @@ function clearCurrentChat() {
   if (currentMessages.length > 0 && confirm('Clear this conversation?')) {
     currentMessages = [];
     if (currentChatId) {
+      if (chatSummaries[currentChatId]) {
+        delete chatSummaries[currentChatId];
+        saveSummaries();
+      }
       var chat = chatHistory.find(function(c) { return c.id === currentChatId; });
       if (chat) { chat.messages = []; localStorage.setItem('chatHistory', JSON.stringify(chatHistory)); }
     }
@@ -1432,12 +1533,17 @@ function clearCurrentChat() {
 
 // ===== Sidebar =====
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebarOverlay').classList.toggle('active');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('active');
+  document.body.classList.toggle('sidebar-open', sidebar.classList.contains('open'));
 }
+
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
+  document.body.classList.remove('sidebar-open');
 }
 
 // ===== Messages =====
@@ -1571,7 +1677,7 @@ function saveCurrentChat(lastMessage) {
 
 function scrollToBottom() {
   var chatArea = document.getElementById('chatArea');
-  chatArea.scrollTop = chatArea.scrollHeight;
+  setTimeout(function() { chatArea.scrollTop = chatArea.scrollHeight; }, 50);
 }
 
 function setTyping(show) {
@@ -1592,10 +1698,26 @@ function playNotificationSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
-  } catch (e) { /* silent fail */ }
+  } catch (e) {}
 }
 
-// ===== Send Message (NO file references) =====
+// ===== Summaries =====
+function saveSummaries() {
+  try {
+    localStorage.setItem('chatSummaries', JSON.stringify(chatSummaries));
+  } catch (e) {
+    var keys = Object.keys(chatSummaries);
+    if (keys.length > 10) {
+      var keep = keys.slice(-5);
+      var newSummaries = {};
+      keep.forEach(function(k) { newSummaries[k] = chatSummaries[k]; });
+      chatSummaries = newSummaries;
+      localStorage.setItem('chatSummaries', JSON.stringify(chatSummaries));
+    }
+  }
+}
+
+// ===== Send Message WITH MEMORY =====
 async function sendMessage() {
   var input = document.getElementById('messageInput');
   var message = input.value.trim();
@@ -1604,13 +1726,35 @@ async function sendMessage() {
   addMessage(message, true);
   input.value = '';
   input.style.height = 'auto';
+
+  if (window.innerWidth <= 768) {
+    input.blur();
+  }
+
   setTyping(true);
 
   try {
+    // Build COMPLETE history from ALL previous messages
+    var history = [];
+    for (var i = 0; i < currentMessages.length - 1; i++) {
+      history.push({
+        role: currentMessages[i].isUser ? 'user' : 'assistant',
+        content: currentMessages[i].content
+      });
+    }
+
+    // Get existing summary for this chat
+    var existingSummary = currentChatId ? (chatSummaries[currentChatId] || null) : null;
+
     var response = await fetch('https://botchat-production-75f8.up.railway.app/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: message })
+      body: JSON.stringify({
+        message: message,
+        history: history,
+        chatId: currentChatId || 'temp_' + Date.now(),
+        summary: existingSummary
+      })
     });
 
     if (!response.ok) {
@@ -1621,9 +1765,18 @@ async function sendMessage() {
     var data = await response.json();
     setTyping(false);
 
-    // Your backend returns: { role: "assistant", content: "..." }
-    // So data.content is correct ✅
     addMessage(data.content, false);
+
+    // Store updated summary if backend created one
+    if (data.summary && currentChatId) {
+      chatSummaries[currentChatId] = data.summary;
+      saveSummaries();
+    }
+
+    if (data.memoryActive) {
+      console.log('Memory active: AI is using summarized history (' + data.messageCount + ' messages sent)');
+    }
+
     if (appSettings.soundEnabled) playNotificationSound();
 
   } catch (error) {
@@ -1633,6 +1786,21 @@ async function sendMessage() {
   }
 }
 
+// ===== THESE WERE MISSING =====
+function useSuggestion(text) {
+  document.getElementById('messageInput').value = text;
+  sendMessage();
+}
+
+function startNewChat() {
+  currentChatId = null;
+  currentMessages = [];
+  showWelcomeScreen();
+  renderChatHistory();
+  closeSidebar();
+}
+
+// ===== Toast =====
 function showToast(message, type) {
   if (!type) type = 'success';
   var toast = document.getElementById('toast');
