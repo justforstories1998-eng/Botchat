@@ -1596,7 +1596,6 @@ function playNotificationSound() {
 }
 
 // ===== Send Message (NO file references) =====
-// ===== REPLACE your entire sendMessage function with this =====
 async function sendMessage() {
   var input = document.getElementById('messageInput');
   var message = input.value.trim();
@@ -1607,14 +1606,12 @@ async function sendMessage() {
   input.style.height = 'auto';
   setTyping(true);
 
-  // ──────────────────────────────────────────────
-  // CHANGE THIS to your actual Railway backend URL
-  // ──────────────────────────────────────────────
-  var API_URL = 'https://botchat-production-75f8.up.railway.app/';
-  // For local development, use: 'http://localhost:3000/chat'
+  // ✅ Use the /chat endpoint, not root /
+  var API_URL = 'https://botchat-production-75f8.up.railway.app';
 
   try {
-    var response = await fetch('https://botchat-production-75f8.up.railway.app/', {
+    // ✅ Actually use the API_URL variable
+    var response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: message })
