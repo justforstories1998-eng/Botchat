@@ -1610,11 +1610,11 @@ async function sendMessage() {
   // ──────────────────────────────────────────────
   // CHANGE THIS to your actual Railway backend URL
   // ──────────────────────────────────────────────
-  var API_URL = 'https://botchat-production-75f8.up.railway.app';
+  var API_URL = 'https://botchat-production-75f8.up.railway.app/';
   // For local development, use: 'http://localhost:3000/chat'
 
   try {
-    var response = await fetch('https://botchat-production-75f8.up.railway.app', {
+    var response = await fetch('https://botchat-production-75f8.up.railway.app/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: message })
