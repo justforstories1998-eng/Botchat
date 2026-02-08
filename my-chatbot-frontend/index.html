@@ -1606,12 +1606,8 @@ async function sendMessage() {
   input.style.height = 'auto';
   setTyping(true);
 
-  // ✅ Use the /chat endpoint, not root /
-  var API_URL = 'https://botchat-production-75f8.up.railway.app/chat';
-
   try {
-    // ✅ Actually use the API_URL variable
-    var response = await fetch(API_URL, {
+    var response = await fetch('https://botchat-production-75f8.up.railway.app/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: message })
@@ -1624,6 +1620,9 @@ async function sendMessage() {
 
     var data = await response.json();
     setTyping(false);
+
+    // Your backend returns: { role: "assistant", content: "..." }
+    // So data.content is correct ✅
     addMessage(data.content, false);
     if (appSettings.soundEnabled) playNotificationSound();
 
@@ -1632,19 +1631,6 @@ async function sendMessage() {
     setTyping(false);
     addMessage('Connection error: ' + error.message + '. Please try again.', false);
   }
-}
-
-function useSuggestion(text) {
-  document.getElementById('messageInput').value = text;
-  sendMessage();
-}
-
-function startNewChat() {
-  currentChatId = null;
-  currentMessages = [];
-  showWelcomeScreen();
-  renderChatHistory();
-  closeSidebar();
 }
 
 function showToast(message, type) {
